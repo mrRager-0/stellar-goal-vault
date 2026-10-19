@@ -49,7 +49,7 @@ scripts/bench-pledge.sh --threshold 5      # stricter regression gate (default 1
 ### Results
 
 Recorded: 2026-10-19 · soroban-sdk 28.0.0 · stellar-cli 27.0.0 ·
-WASM 25 239 bytes (`stellar contract build`, optimized from 30 594).
+WASM 25 803 bytes (`stellar contract build`, optimized from 31 166).
 `fee` is the SDK's mainnet fee estimate in stroops. It includes rent for
 newly created entries, which is why a first pledge to a fresh campaign
 costs more than later ones.
@@ -66,7 +66,7 @@ costs more than later ones.
 | `contribute_first_pledge_after_100` | 2 699 076 | 1 898 593 | 13 | 8 | 5 764 | 512 | 2 259 136 |
 | `contribute_first_pledge_after_400` | 6 986 117 | 3 698 593 | 13 | 8 | 17 764 | 512 | 2 272 391 |
 | `claim_1_token_with_fee` | 1 144 636 | 1 312 862 | 11 | 6 | 1 484 | 1 024 | 4 472 345 |
-| `refund_1_token` | 976 764 | 1 285 526 | 10 | 6 | 1 460 | 512 | 2 223 019 |
+| `refund_1_token` | 979 459 | 1 285 630 | 10 | 6 | 1 460 | 512 | 2 223 021 |
 | `refund_all_10_contributors` | 5 170 610 | 1 813 190 | 29 | 24 | 5 276 | 5 120 | 2 324 850 |
 | `refund_all_32_contributors` | 19 917 313 | 4 558 086 | 73 | 68 | 14 604 | 16 384 | 2 576 916 |
 
@@ -120,7 +120,7 @@ scripts/bench-claim.sh --update-baseline  # accept the new numbers (commit the T
 
 ### Results
 
-Recorded: 2026-10-19 · soroban-sdk 28.0.0 · stellar-cli 27.0.0 · WASM 25 239 bytes.
+Recorded: 2026-10-19 · soroban-sdk 28.0.0 · stellar-cli 27.0.0 · WASM 25 803 bytes.
 "Fee disabled" is `set_fee(0)`. "No fee recipient" is the default 50 bps
 with no recipient set, which takes no fee. "With fee" is 50 bps with a
 recipient.

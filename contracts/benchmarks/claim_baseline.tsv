@@ -1,4 +1,4 @@
-# wasm_bytes	25239
+# wasm_bytes	25803
 scenario	mode	instructions	mem_bytes	read_entries	write_entries	write_bytes	events_bytes	fee_stroops
 claim_10_tokens_1_funded	wasm	1671584	1419638	20	6	1844	1024	4473021
 claim_10_tokens_fee_disabled	wasm	4535885	2004294	55	32	7164	5080	13599771
