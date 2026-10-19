@@ -275,6 +275,11 @@ mod test_pledge_auth;
 #[cfg(test)]
 mod test_pledge_bench;
 
+// Repeatable resource measurements for the claim path; reuses the pledge
+// bench fixture. Run with `scripts/bench-claim.sh`.
+#[cfg(test)]
+mod test_claim_bench;
+
 // Governance module for multi-sig campaign approval
 mod governance;
 

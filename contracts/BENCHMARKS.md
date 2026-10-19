@@ -37,6 +37,14 @@ scripts/bench-pledge.sh --threshold 5      # stricter regression gate (default 1
 * The SDK's mainnet per-transaction limits (snapshot 2026-07-10) are
   enforced on every metered call. A scenario that would fail on mainnet
   fails the run.
+* **Caveat: instructions grow with the test ledger's size.** The test host
+  keeps every entry the test created in one storage map. Lookups in a bigger
+  map meter more instructions, even for unrelated entries: a single-backer
+  `claim` costs 1.14 M instructions on a clean ledger and 1.86 M after 49
+  contributors pledged to a *different* campaign. On chain the footprint
+  holds only the declared entries, so treat instruction growth in "after N"
+  scenarios as an upper bound. Entry counts, bytes and events are not
+  affected.
 
 ### Results
 
@@ -76,9 +84,10 @@ behaviours. They run in the normal `cargo test` suite.
    grows by about 0.66 M instructions and 2 writes per contributor.
 2. **The `Contributors(id)` rewrite grows with every new contributor.**
    `contribute` reads and rewrites the entire contributor `Vec` on each
-   first-time pledge. That adds about 40 write bytes and about 14 k
-   instructions per existing contributor (6.99 M instructions and 17.7 KB
-   written at 400 contributors). By extrapolation, the entry would reach the
+   first-time pledge. That adds about 40 write bytes per existing
+   contributor (17.7 KB written at 400 contributors). The instruction growth
+   in the table (to 6.99 M at 400) is mostly the test-ledger caveat above,
+   not on-chain cost. By extrapolation, the entry would reach the
    64 KiB mainnet entry-size cap at roughly 1 600 contributors. After that,
    new contributors could not pledge at all. This ceiling is extrapolated,
    not measured.
@@ -86,13 +95,75 @@ behaviours. They run in the normal `cargo test` suite.
    With `max_per_contributor` set, `contribute` sums `Contribution` entries
    across every accepted token. That is +9 reads and +0.6 M instructions at
    10 tokens. It is bounded by `MAX_ACCEPTED_TOKENS`.
-4. **`claim` with a fee recipient** makes two token transfers per token and
-   has the highest single-call fee estimate on the path (about 4.47 M
-   stroops).
+4. **`claim` with a fee recipient** makes two token transfers per token.
+   See the claim section below.
 
 Possible mitigations (not part of this change): paginate `refund_all`, or
 emit one summary event instead of one per contributor. Keep contributors in
 per-index entries instead of one `Vec`.
+
+## Claim Path Resource Benchmark (repeatable, offline)
+
+`scripts/bench-claim.sh` measures `claim` the same way, with the same
+fixture, options and comparison rules as the pledge benchmark. Both wrappers
+call `scripts/bench-contract.sh <suite>`.
+
+```bash
+scripts/bench-claim.sh                    # build WASM, measure, compare to baseline
+scripts/bench-claim.sh --update-baseline  # accept the new numbers (commit the TSV)
+```
+
+* Scenarios live in [`src/test_claim_bench.rs`](./src/test_claim_bench.rs).
+  Each one creates a campaign funded to exactly its target, passes the
+  deadline, configures the fee, then meters the single `claim` call.
+* The baseline is [`benchmarks/claim_baseline.tsv`](./benchmarks/claim_baseline.tsv).
+
+### Results
+
+Recorded: 2026-10-19 · soroban-sdk 28.0.0 · stellar-cli 27.0.0 · WASM 25 239 bytes.
+"Fee disabled" is `set_fee(0)`. "No fee recipient" is the default 50 bps
+with no recipient set, which takes no fee. "With fee" is 50 bps with a
+recipient.
+
+| Scenario | CPU instr | Mem bytes | Reads | Writes | Write bytes | Event bytes | Fee (stroops) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `claim_1_token_fee_disabled` | 966 946 | 1 284 402 | 10 | 5 | 1 260 | 508 | 3 342 905 |
+| `claim_1_token_no_fee_recipient` | 953 963 | 1 283 134 | 10 | 5 | 1 260 | 508 | 3 342 896 |
+| `claim_1_token_with_fee` | 1 144 636 | 1 312 862 | 11 | 6 | 1 484 | 1 024 | 4 472 345 |
+| `claim_1_token_multisig_3` | 1 220 403 | 1 327 471 | 12 | 6 | 1 604 | 1 024 | 4 472 500 |
+| `claim_10_tokens_1_funded` | 1 671 584 | 1 419 638 | 20 | 6 | 1 844 | 1 024 | 4 473 021 |
+| `claim_10_tokens_fee_disabled` | 4 535 885 | 2 004 294 | 55 | 32 | 7 164 | 5 080 | 13 599 771 |
+| `claim_10_tokens_with_fee` | 7 277 502 | 2 634 854 | 65 | 42 | 9 404 | 10 240 | 24 894 839 |
+
+### High-cost operations
+
+The non-ignored `claim_cost_*` tests in `src/test_claim_bench.rs` pin these
+behaviours.
+
+1. **Each funded token costs about 2.3 M stroops.** Every token transfer
+   to the creator (and to the fee recipient) can create a new token balance
+   entry, and new entries pay rent up front. A fully funded 10-token claim
+   with a fee is estimated at about 24.9 M stroops (about 2.5 XLM), versus
+   4.47 M for one token. This is the most expensive single call measured on
+   either path.
+2. **The event budget limits `MAX_ACCEPTED_TOKENS`.** With a fee, `claim`
+   emits a `Fee` and a `Claim` event per funded token (1 024 bytes).
+   10 tokens use 10 240 of the 16 384-byte mainnet event cap. Raising
+   `MAX_ACCEPTED_TOKENS` above 16 would make a fully funded claim fail on
+   chain, and the campaign's funds could not be claimed.
+3. **Unfunded accepted tokens still cost a read each.** `claim` reads
+   `CampaignTokenBalance` for every accepted token, so 9 tokens that received
+   nothing add 9 reads and about 0.5 M instructions.
+4. **Claimed balances are zeroed, not removed.** `claim` writes `0` to each
+   `CampaignTokenBalance` entry instead of removing it, so the entry stays
+   on the ledger (and keeps needing rent) after the campaign is finished. Per-contributor `Contribution` entries are also left in place.
+5. **Not a cost driver: contributor count.** `claim` iterates tokens, not
+   contributors, and touches the same entries for one backer or for twenty.
+   Multi-sig adds one read (`CampaignApproval`).
+
+Possible mitigations (not part of this change): remove the balance entry
+instead of zeroing it. Skip the per-token `Claim` event when the `Fee` event
+already carries the amounts, or emit one summary event per claim.
 
 ## WASM Binary Size
 

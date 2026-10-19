@@ -33,8 +33,8 @@ use soroban_sdk::{
 
 use crate::{StellarGoalVaultContract, StellarGoalVaultContractClient};
 
-const DURATION: u64 = 1_000;
-const PLEDGE: i128 = 1_000;
+pub(crate) const DURATION: u64 = 1_000;
+pub(crate) const PLEDGE: i128 = 1_000;
 /// Large enough that no scenario hits the campaign funding cap.
 const TARGET: i128 = 1_000_000_000;
 /// Mainnet limits the host enforces by default in SDK 28.
@@ -45,26 +45,27 @@ const MAINNET_TX_WRITE_BYTES: u32 = 132 * 1024;
 const REFUND_ALL_MAX_CONTRIBUTORS: u32 = 32;
 
 /// One metered invocation, as written to the benchmark output.
-struct Measurement {
-    instructions: i64,
-    mem_bytes: i64,
-    read_entries: u32,
-    write_entries: u32,
-    write_bytes: u32,
-    events_bytes: u32,
-    fee_stroops: i64,
+pub(crate) struct Measurement {
+    pub(crate) instructions: i64,
+    pub(crate) mem_bytes: i64,
+    pub(crate) read_entries: u32,
+    pub(crate) write_entries: u32,
+    pub(crate) write_bytes: u32,
+    pub(crate) events_bytes: u32,
+    pub(crate) fee_stroops: i64,
 }
 
-struct Bench {
-    env: Env,
-    client: StellarGoalVaultContractClient<'static>,
-    admin: Address,
-    creator: Address,
+/// Shared fixture: also used by `test_claim_bench`.
+pub(crate) struct Bench {
+    pub(crate) env: Env,
+    pub(crate) client: StellarGoalVaultContractClient<'static>,
+    pub(crate) admin: Address,
+    pub(crate) creator: Address,
     mode: &'static str,
 }
 
 impl Bench {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let env = Env::new_with_config(EnvTestConfig {
             capture_snapshot_at_drop: false,
         });
@@ -98,13 +99,13 @@ impl Bench {
         }
     }
 
-    fn token(&self) -> Address {
+    pub(crate) fn token(&self) -> Address {
         self.env
             .register_stellar_asset_contract_v2(self.admin.clone())
             .address()
     }
 
-    fn funded(&self, tokens: &Vec<Address>) -> Address {
+    pub(crate) fn funded(&self, tokens: &Vec<Address>) -> Address {
         let who = Address::generate(&self.env);
         for t in tokens.iter() {
             StellarAssetClient::new(&self.env, &t).mint(&who, &(PLEDGE * 1_000));
@@ -127,7 +128,7 @@ impl Bench {
 
     /// Pledges from `n` fresh contributors so later measurements see a
     /// campaign that already has `n` entries in `Contributors(id)`.
-    fn add_contributors(&self, id: u64, token: &Address, n: u32) {
+    pub(crate) fn add_contributors(&self, id: u64, token: &Address, n: u32) {
         let tokens = soroban_sdk::vec![&self.env, token.clone()];
         for _ in 0..n {
             let who = self.funded(&tokens);
@@ -135,14 +136,14 @@ impl Bench {
         }
     }
 
-    fn pass_deadline(&self) {
+    pub(crate) fn pass_deadline(&self) {
         self.env
             .ledger()
             .with_mut(|l| l.timestamp += DURATION + 1);
     }
 
     /// Reads the metering of the call that just ran.
-    fn measure(&self) -> Measurement {
+    pub(crate) fn measure(&self) -> Measurement {
         let est = self.env.cost_estimate();
         let r = est.resources();
         Measurement {
@@ -156,8 +157,8 @@ impl Bench {
         }
     }
 
-    fn report(&self, scenario: &str, m: &Measurement) {
-        // One machine-readable line per scenario; scripts/bench-pledge.sh
+    pub(crate) fn report(&self, scenario: &str, m: &Measurement) {
+        // One machine-readable line per scenario; scripts/bench-contract.sh
         // greps for the `BENCH\t` prefix. Columns match the baseline header.
         let line: StdVec<StdString> = [
             scenario.into(),
